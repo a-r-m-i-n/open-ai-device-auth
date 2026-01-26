@@ -9,8 +9,9 @@ OpenCode's built-in ChatGPT OAuth requires a browser on the same machine. This t
 ## Prerequisites
 
 Enable Device Code authentication in your ChatGPT account:
-1. Go to https://chatgpt.com/settings/security
-2. Enable "Device Code Authentication"
+
+1. Go to [ChatGPT Codex Security Settings](https://chatgpt.com/codex/settings/general#settings/Security)
+2. Turn on **"Enable device code authentication for Codex"**
 
 ## Usage
 
