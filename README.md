@@ -13,6 +13,8 @@ Enable Device Code authentication in your ChatGPT account:
 1. Go to [ChatGPT Codex Security Settings](https://chatgpt.com/codex/settings/general#settings/Security)
 2. Turn on **"Enable device code authentication for Codex"**
 
+![Security Settings](assets/security-settings.png)
+
 ## Usage
 
 ### One-time execution (recommended)
