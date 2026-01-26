@@ -1,0 +1,39 @@
+{
+  "name": "opencode-openai-device-auth",
+  "version": "1.0.0",
+  "description": "Device Code authentication for OpenCode - authenticate ChatGPT Plus/Pro in headless environments",
+  "main": "dist/index.js",
+  "bin": {
+    "opencode-openai-device-auth": "dist/index.js"
+  },
+  "type": "module",
+  "scripts": {
+    "build": "tsc",
+    "start": "tsx src/index.ts",
+    "prepublishOnly": "npm run build"
+  },
+  "keywords": [
+    "opencode",
+    "openai",
+    "chatgpt",
+    "oauth",
+    "device-code",
+    "authentication",
+    "headless",
+    "cli"
+  ],
+  "author": "",
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/tumf/opencode-openai-device-auth.git"
+  },
+  "devDependencies": {
+    "@types/node": "^22.0.0",
+    "tsx": "^4.21.0",
+    "typescript": "^5.7.0"
+  },
+  "engines": {
+    "node": ">=18.0.0"
+  }
+}
