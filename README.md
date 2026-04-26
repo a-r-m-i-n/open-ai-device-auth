@@ -1,76 +1,62 @@
-# opencode-openai-device-auth
+# open-ai-device-auth
 
-Device Code authentication for [OpenCode](https://opencode.ai) - authenticate ChatGPT Plus/Pro in headless environments (SSH, Docker, remote servers).
+Device Code authentication as a PHP Composer package. The CLI performs the OpenAI device login flow and writes an `auth.json` with ChatGPT tokens.
 
-## Why?
+## Requirements
 
-OpenCode's built-in ChatGPT OAuth requires a browser on the same machine. This tool uses [Device Code flow](https://developers.openai.com/codex/auth/#preferred-device-code-authentication-beta) to authenticate from any browser, even on a different device.
+- PHP 8.4+
+- Composer
+- Device Code authentication enabled in your ChatGPT account
 
-## Prerequisites
+## Installation
 
-Enable Device Code authentication in your ChatGPT account:
-
-1. Go to [ChatGPT Codex Security Settings](https://chatgpt.com/codex/settings/general#settings/Security)
-2. Turn on **"Enable device code authentication for Codex"**
-
-![Security Settings](assets/security-settings.png)
+```bash
+composer require armin/open-ai-device-auth
+```
 
 ## Usage
 
-### One-time execution (recommended)
+Run the Composer binary:
 
 ```bash
-npx opencode-openai-device-auth
+vendor/bin/open-ai-device-auth
 ```
 
-### Or install globally
+Write to a custom location:
 
 ```bash
-npm install -g opencode-openai-device-auth
-opencode-openai-device-auth
+vendor/bin/open-ai-device-auth --output=/path/to/auth.json
 ```
 
-## How it works
+## Flow
 
-1. Run the command - you'll get a URL and a one-time code
-2. Open the URL in any browser (phone, laptop, etc.)
-3. Enter the code and sign in with your ChatGPT account
-4. Tokens are saved to `~/.local/share/opencode/auth.json`
-5. Use OpenCode normally with ChatGPT Plus/Pro models
+1. Run the command.
+2. Open `https://auth.openai.com/codex/device` in any browser.
+3. Enter the displayed one-time code.
+4. Wait for authorization to complete.
+5. The CLI writes `./auth.json` unless `--output` is provided.
 
-```
-=== OpenCode OpenAI Device Code Authentication ===
+## Output Format
 
-Requesting device code...
-
-Follow these steps to sign in:
-
-1. Open this link in your browser:
-   https://auth.openai.com/codex/device
-
-2. Enter this one-time code (expires in 15 minutes)
-   ABCD-12345
-
-Waiting for authorization...
-..........
-
-✓ Authentication successful!
-Tokens saved to /home/user/.local/share/opencode/auth.json
-
-You can now use OpenCode with your ChatGPT subscription:
-  opencode run "hello" --model=openai/gpt-5.1-codex
+```json
+{
+  "auth_mode": "chatgpt",
+  "OPENAI_API_KEY": null,
+  "tokens": {
+    "id_token": "...",
+    "access_token": "...",
+    "refresh_token": "...",
+    "account_id": "..."
+  },
+  "last_refresh": "2026-04-24T11:17:48.681452Z"
+}
 ```
 
-## Use Cases
+## Notes
 
-- **SSH sessions** - Authenticate on remote servers
-- **Docker containers** - No browser needed inside containers
-- **CI/CD pipelines** - Automate authentication
-- **Headless servers** - No GUI required
-
-## Credits
-
-Based on [OpenAI Codex CLI](https://github.com/openai/codex)'s device code implementation.
+- The file format is tailored for ChatGPT token storage, not generic API key auth.
+- `account_id` is extracted from the returned `id_token`.
+- `last_refresh` is written as the current UTC timestamp when the file is created.
 
 ## License
 
