@@ -6,7 +6,6 @@ Device Code authentication as a PHP Composer package. The CLI performs the OpenA
 
 - PHP 8.4+
 - Composer
-- Symfony Console, Filesystem and HttpClient 7.4+ or 8.x
 - Device Code authentication enabled in your ChatGPT account
 
 ## Installation
@@ -17,21 +16,53 @@ composer require armin/open-ai-device-auth
 
 ## Usage
 
-Run the Composer binary:
+The CLI exposes three commands:
 
 ```bash
-vendor/bin/open-ai-device-auth
+vendor/bin/open-ai-device-auth login
+vendor/bin/open-ai-device-auth refresh
+vendor/bin/open-ai-device-auth usage
+```
+
+### Login
+
+Start the device login flow:
+
+```bash
+vendor/bin/open-ai-device-auth login
 ```
 
 Write to a custom location:
 
 ```bash
-vendor/bin/open-ai-device-auth --output=/path/to/auth.json
+vendor/bin/open-ai-device-auth login --output=/path/to/auth.json
+```
+
+### Refresh
+
+Refresh tokens in an existing `auth.json`:
+
+```bash
+vendor/bin/open-ai-device-auth refresh --auth-file=/path/to/auth.json
+```
+
+### Usage
+
+Fetch ChatGPT usage and rate limits from an existing `auth.json`:
+
+```bash
+vendor/bin/open-ai-device-auth usage --auth-file=/path/to/auth.json
+```
+
+Return the raw payload as JSON:
+
+```bash
+vendor/bin/open-ai-device-auth usage --auth-file=/path/to/auth.json --format=json
 ```
 
 ## Flow
 
-1. Run the command.
+1. Run the `login` command.
 2. Open `https://auth.openai.com/codex/device` in any browser.
 3. Enter the displayed one-time code.
 4. Wait for authorization to complete.
@@ -58,6 +89,8 @@ vendor/bin/open-ai-device-auth --output=/path/to/auth.json
 - The file format is tailored for ChatGPT token storage, not generic API key auth.
 - `account_id` is extracted from the returned `id_token`.
 - `last_refresh` is written as the current UTC timestamp when the file is created.
+- `refresh` replaces the stored tokens in-place and updates `last_refresh`.
+- `usage` reads the stored `access_token` and prints either a human-readable summary or JSON.
 
 ## License
 

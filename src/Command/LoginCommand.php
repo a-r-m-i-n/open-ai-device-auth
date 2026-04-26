@@ -22,30 +22,34 @@ use Symfony\Component\Console\Output\OutputInterface;
 use Symfony\Component\Console\Style\SymfonyStyle;
 
 #[AsCommand(name: self::NAME, description: 'Authenticate via OpenAI device code flow and write auth.json.')]
-final class OpenAiDeviceAuthCommand extends Command
+final class LoginCommand extends Command
 {
-    public const NAME = 'open-ai-device-auth';
+    public const NAME = 'login';
+
+    public function __construct(
+        private readonly ?DeviceCodeClient $deviceCodeClient = null,
+        private readonly ?DeviceCodePoller $poller = null,
+        private readonly ?TokenExchanger $tokenExchanger = null,
+        private readonly ?TokenPayloadDecoder $tokenPayloadDecoder = null,
+        private readonly ?AuthFileWriter $authFileWriter = null
+    ) {
+        parent::__construct();
+    }
 
     protected function configure(): void
     {
-        $this->addOption(
-            'output',
-            null,
-            InputOption::VALUE_REQUIRED,
-            'Output path for auth.json',
-            './auth.json'
-        );
+        $this->addOption('output', null, InputOption::VALUE_REQUIRED, 'Output path for auth.json', './auth.json');
     }
 
     protected function execute(InputInterface $input, OutputInterface $output): int
     {
         $io = new SymfonyStyle($input, $output);
         $httpClient = OpenAiHttpClientFactory::create();
-        $deviceCodeClient = new DeviceCodeClient($httpClient);
-        $poller = new DeviceCodePoller($httpClient);
-        $tokenExchanger = new TokenExchanger($httpClient);
-        $tokenPayloadDecoder = new TokenPayloadDecoder();
-        $authFileWriter = new AuthFileWriter();
+        $deviceCodeClient = $this->deviceCodeClient ?? new DeviceCodeClient($httpClient);
+        $poller = $this->poller ?? new DeviceCodePoller($httpClient);
+        $tokenExchanger = $this->tokenExchanger ?? new TokenExchanger($httpClient);
+        $tokenPayloadDecoder = $this->tokenPayloadDecoder ?? new TokenPayloadDecoder();
+        $authFileWriter = $this->authFileWriter ?? new AuthFileWriter();
 
         $io->title('OpenAI Device Code Authentication');
         $io->text('Requesting device code...');

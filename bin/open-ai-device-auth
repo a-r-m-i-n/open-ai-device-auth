@@ -3,13 +3,16 @@
 
 declare(strict_types=1);
 
-use Armin\OpenAiDeviceAuth\Command\OpenAiDeviceAuthCommand;
+use Armin\OpenAiDeviceAuth\Command\LoginCommand;
+use Armin\OpenAiDeviceAuth\Command\RefreshCommand;
+use Armin\OpenAiDeviceAuth\Command\UsageCommand;
 use Symfony\Component\Console\Application;
 
 require dirname(__DIR__) . '/vendor/autoload.php';
 
 $application = new Application('open-ai-device-auth');
-$application->addCommand(new OpenAiDeviceAuthCommand());
-$application->setDefaultCommand(OpenAiDeviceAuthCommand::NAME, true);
+$application->addCommand(new LoginCommand());
+$application->addCommand(new RefreshCommand());
+$application->addCommand(new UsageCommand());
 
 exit($application->run());

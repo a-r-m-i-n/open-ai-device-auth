@@ -30,4 +30,19 @@ final class AuthFileWriterTest extends TestCase
         self::assertSame('account-123', $json['tokens']['account_id']);
         self::assertMatchesRegularExpression('/^\d{4}-\d{2}-\d{2}T.*Z$/', $json['last_refresh']);
     }
+
+    public function testItOverwritesExistingAuthFileWithNewTokens(): void
+    {
+        $path = sys_get_temp_dir() . '/open-ai-device-auth-' . uniqid('', true) . '.json';
+        file_put_contents($path, '{"stale":true}');
+
+        (new AuthFileWriter())->write($path, new TokenResponse('new-id', 'new-access', 'new-refresh', 0), 'new-account');
+
+        /** @var array<string, mixed> $json */
+        $json = json_decode((string) file_get_contents($path), true, 512, JSON_THROW_ON_ERROR);
+        self::assertSame('new-id', $json['tokens']['id_token']);
+        self::assertSame('new-access', $json['tokens']['access_token']);
+        self::assertSame('new-refresh', $json['tokens']['refresh_token']);
+        self::assertSame('new-account', $json['tokens']['account_id']);
+    }
 }

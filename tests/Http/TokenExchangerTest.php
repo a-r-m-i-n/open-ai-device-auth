@@ -29,6 +29,7 @@ final class TokenExchangerTest extends TestCase
         self::assertSame('id-token', $response->idToken);
         self::assertSame('access-token', $response->accessToken);
         self::assertSame('refresh-token', $response->refreshToken);
+        self::assertSame(3600, $response->expiresIn);
     }
 
     public function testItFailsOnUnexpectedHttpStatus(): void
