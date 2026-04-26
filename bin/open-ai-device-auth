@@ -9,7 +9,7 @@ use Symfony\Component\Console\Application;
 require dirname(__DIR__) . '/vendor/autoload.php';
 
 $application = new Application('open-ai-device-auth');
-$application->add(new OpenAiDeviceAuthCommand());
+$application->addCommand(new OpenAiDeviceAuthCommand());
 $application->setDefaultCommand(OpenAiDeviceAuthCommand::NAME, true);
 
 exit($application->run());

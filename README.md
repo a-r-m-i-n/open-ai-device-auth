@@ -6,6 +6,7 @@ Device Code authentication as a PHP Composer package. The CLI performs the OpenA
 
 - PHP 8.4+
 - Composer
+- Symfony Console, Filesystem and HttpClient 7.4+ or 8.x
 - Device Code authentication enabled in your ChatGPT account
 
 ## Installation
