@@ -36,8 +36,8 @@ final class UsageCommand extends Command
     protected function configure(): void
     {
         $this
-            ->addOption('auth-file', null, InputOption::VALUE_REQUIRED, 'Path to an existing auth.json')
-            ->addOption('format', null, InputOption::VALUE_REQUIRED, 'Output format: text or json', 'text');
+            ->addOption('auth-file', 'a', InputOption::VALUE_REQUIRED, 'Path to an existing auth.json')
+            ->addOption('format', 'f', InputOption::VALUE_REQUIRED, 'Output format: text, json or bars (default)', 'bars');
     }
 
     protected function execute(InputInterface $input, OutputInterface $output): int
@@ -51,8 +51,8 @@ final class UsageCommand extends Command
             }
 
             $format = (string) $input->getOption('format');
-            if (!in_array($format, ['text', 'json'], true)) {
-                throw new OpenAiDeviceAuthException('The --format option must be either text or json.');
+            if (!in_array($format, ['text', 'json', 'bars'], true)) {
+                throw new OpenAiDeviceAuthException('The --format option must be either text, json or bars.');
             }
 
             $httpClient = OpenAiHttpClientFactory::create();
@@ -73,7 +73,13 @@ final class UsageCommand extends Command
                 return Command::SUCCESS;
             }
 
-            $this->renderTextUsage($io, $usage);
+            if ($format === 'bars') {
+                $this->renderBarsUsage($io, $usage, $authFilePath);
+
+                return Command::SUCCESS;
+            }
+
+            $this->renderTextUsage($io, $usage, $authFilePath);
 
             return Command::SUCCESS;
         } catch (OpenAiDeviceAuthException $exception) {
@@ -83,10 +89,12 @@ final class UsageCommand extends Command
         }
     }
 
-    private function renderTextUsage(SymfonyStyle $io, UsageResponse $usage): void
+    private function renderTextUsage(SymfonyStyle $io, UsageResponse $usage, string $authFilePath): void
     {
         $primaryLeft = max(0, 100 - $usage->primary->usedPercent);
         $io->title('ChatGPT Usage');
+        $io->writeln($authFilePath);
+        $io->newLine();
         $io->definitionList(
             ['Primary Left' => $this->formatLeftPercent($primaryLeft)],
             ['Primary Used' => $this->formatUsedPercent($usage->primary->usedPercent)],
@@ -107,6 +115,23 @@ final class UsageCommand extends Command
         }
 
         if ($usage->rateLimitReachedType !== null) {
+            $io->text(sprintf('Rate limit reached type: %s', $usage->rateLimitReachedType));
+        }
+    }
+
+    private function renderBarsUsage(SymfonyStyle $io, UsageResponse $usage, string $authFilePath): void
+    {
+        $io->title('ChatGPT Usage');
+        $io->writeln($authFilePath);
+        $io->newLine();
+        $io->writeln($this->formatUsageBarLine($usage->primary));
+
+        if ($usage->secondary !== null) {
+            $io->writeln($this->formatUsageBarLine($usage->secondary));
+        }
+
+        if ($usage->rateLimitReachedType !== null) {
+            $io->writeln('');
             $io->text(sprintf('Rate limit reached type: %s', $usage->rateLimitReachedType));
         }
     }
@@ -159,5 +184,110 @@ final class UsageCommand extends Command
         }
 
         return sprintf('%dh %dm', $hours, $minutes);
+    }
+
+    private function formatUsageBarLine(UsageWindow $window): string
+    {
+        $leftPercent = max(0.0, 100.0 - $window->usedPercent);
+        $roundedLeftPercent = (int) round($leftPercent);
+        $style = $this->getThresholdStyle($leftPercent, 25.0, 10.0, false);
+        $label = $this->formatWindowLabel($window);
+        $bar = $this->buildProgressBar($leftPercent, 24, $style);
+        $percent = $this->applyStyle(sprintf('%d%% left', $roundedLeftPercent), $style);
+
+        return sprintf(
+            '%s %s %s (reset in %s)',
+            str_pad($label, 2, ' ', STR_PAD_RIGHT),
+            $bar,
+            $percent,
+            $this->formatResetCountdownForBars($window)
+        );
+    }
+
+    private function formatWindowLabel(UsageWindow $window): string
+    {
+        if ($window->windowDurationMins % 1440 === 0) {
+            return sprintf('%dd', intdiv($window->windowDurationMins, 1440));
+        }
+
+        if ($window->windowDurationMins % 60 === 0) {
+            return sprintf('%dh', intdiv($window->windowDurationMins, 60));
+        }
+
+        return sprintf('%dm', $window->windowDurationMins);
+    }
+
+    private function buildProgressBar(float $percent, int $width, ?string $style): string
+    {
+        $filled = (int) round(($percent / 100) * $width);
+        $filled = max(0, min($width, $filled));
+
+        $filledSegment = str_repeat('█', $filled);
+        $emptySegment = str_repeat('░', $width - $filled);
+
+        if ($filledSegment !== '') {
+            $filledSegment = $this->applyStyle($filledSegment, $style ?? 'green');
+        }
+
+        if ($emptySegment !== '') {
+            $emptySegment = $this->applyStyle($emptySegment, 'gray');
+        }
+
+        return sprintf(
+            '%s%s%s',
+            $this->applyStyle('[', $style ?? 'green'),
+            $filledSegment . $emptySegment,
+            $this->applyStyle(']', $style ?? 'green')
+        );
+    }
+
+    private function formatResetCountdownForBars(UsageWindow $window): string
+    {
+        $resetAt = new DateTimeImmutable($window->resetsAt);
+        $now = $this->nowProvider !== null
+            ? ($this->nowProvider)()
+            : new DateTimeImmutable('now', new DateTimeZone('UTC'));
+
+        $secondsLeft = max(0, $resetAt->getTimestamp() - $now->getTimestamp());
+        $minutesLeft = intdiv($secondsLeft, 60);
+        if ($minutesLeft === 0) {
+            return '0min';
+        }
+
+        $days = intdiv($minutesLeft, 1440);
+        $hours = intdiv($minutesLeft % 1440, 60);
+        $minutes = $minutesLeft % 60;
+
+        if ($days > 0) {
+            return $hours > 0
+                ? sprintf('%dd %dh', $days, $hours)
+                : sprintf('%dd', $days);
+        }
+
+        return sprintf('%dh %dmin', $hours, $minutes);
+    }
+
+    private function getThresholdStyle(float $percent, float $warningThreshold, float $criticalThreshold, bool $higherIsWorse): ?string
+    {
+        $isCritical = $higherIsWorse ? $percent >= $criticalThreshold : $percent <= $criticalThreshold;
+        if ($isCritical) {
+            return 'red';
+        }
+
+        $isWarning = $higherIsWorse ? $percent >= $warningThreshold : $percent <= $warningThreshold;
+        if ($isWarning) {
+            return '#ffa500';
+        }
+
+        return null;
+    }
+
+    private function applyStyle(string $text, ?string $style): string
+    {
+        if ($style === null) {
+            return $text;
+        }
+
+        return sprintf('<fg=%s>%s</>', $style, $text);
     }
 }

@@ -110,9 +110,10 @@ final class CommandTest extends TestCase
 
         $tester = new CommandTester($command);
 
-        self::assertSame(0, $tester->execute(['--auth-file' => $path]));
+        self::assertSame(0, $tester->execute(['--auth-file' => $path, '--format' => 'text']));
         $display = $tester->getDisplay();
         self::assertStringContainsString('ChatGPT Usage', $display);
+        self::assertStringContainsString(sprintf('Auth file: %s', $path), $display);
         self::assertStringContainsString('Primary Left', $display);
         self::assertStringContainsString('75.00%', $display);
         self::assertStringContainsString('25.00%', $display);
@@ -147,7 +148,7 @@ final class CommandTest extends TestCase
 
         $tester = new CommandTester($command);
 
-        self::assertSame(0, $tester->execute(['--auth-file' => $path]));
+        self::assertSame(0, $tester->execute(['--auth-file' => $path, '--format' => 'text']));
         $display = $tester->getDisplay();
         self::assertStringContainsString('Secondary Left', $display);
         self::assertStringContainsString('90.00%', $display);
@@ -209,6 +210,114 @@ final class CommandTest extends TestCase
         self::assertStringNotContainsString('Resets In', $tester->getDisplay());
     }
 
+    public function testUsageCommandRendersBarsOutput(): void
+    {
+        $path = $this->createAuthJson('access-token', 'refresh-token', 'account-123');
+        $command = new UsageCommand(
+            new AuthFileReader(),
+            new UsageClient(new MockHttpClient([
+                new MockResponse(json_encode([
+                    'primary' => [
+                        'usedPercent' => 69,
+                        'windowDurationMins' => 300,
+                        'resetsAt' => '2026-04-26T12:15:00Z',
+                    ],
+                    'secondary' => [
+                        'usedPercent' => 10,
+                        'windowDurationMins' => 10080,
+                        'resetsAt' => '2026-05-01T21:00:00Z',
+                    ],
+                ], JSON_THROW_ON_ERROR)),
+            ])),
+            $this->fixedNow('2026-04-26T10:00:00Z')
+        );
+
+        $tester = new CommandTester($command);
+
+        self::assertSame(0, $tester->execute(['--auth-file' => $path, '--format' => 'bars']));
+        $display = $tester->getDisplay();
+        self::assertStringContainsString(sprintf('Auth file: %s', $path), $display);
+        self::assertStringContainsString('5h', $display);
+        self::assertStringContainsString('31% left (reset in 2h 15min)', $display);
+        self::assertStringContainsString('7d', $display);
+        self::assertStringContainsString('90% left (reset in 5d 11h)', $display);
+        self::assertStringContainsString('█', $display);
+        self::assertStringContainsString('░', $display);
+    }
+
+    public function testUsageCommandSupportsShortOptionAliases(): void
+    {
+        $path = $this->createAuthJson('access-token', 'refresh-token', 'account-123');
+        $command = new UsageCommand(
+            new AuthFileReader(),
+            new UsageClient(new MockHttpClient([
+                new MockResponse(json_encode([
+                    'primary' => [
+                        'usedPercent' => 25,
+                        'windowDurationMins' => 300,
+                        'resetsAt' => '2026-04-26T12:15:00Z',
+                    ],
+                ], JSON_THROW_ON_ERROR)),
+            ])),
+            $this->fixedNow('2026-04-26T10:00:00Z')
+        );
+
+        $tester = new CommandTester($command);
+
+        self::assertSame(0, $tester->execute(['-a' => $path, '-f' => 'bars']));
+        self::assertStringContainsString(sprintf('Auth file: %s', $path), $tester->getDisplay());
+        self::assertStringContainsString('5h', $tester->getDisplay());
+        self::assertStringContainsString('75% left (reset in 2h 15min)', $tester->getDisplay());
+    }
+
+    public function testUsageCommandHighlightsWarningThresholdsInBarsOutput(): void
+    {
+        $path = $this->createAuthJson('access-token', 'refresh-token', 'account-123');
+        $command = new UsageCommand(
+            new AuthFileReader(),
+            new UsageClient(new MockHttpClient([
+                new MockResponse(json_encode([
+                    'primary' => [
+                        'usedPercent' => 80,
+                        'windowDurationMins' => 300,
+                        'resetsAt' => '2026-04-26T12:00:00Z',
+                    ],
+                ], JSON_THROW_ON_ERROR)),
+            ]))
+        );
+
+        $tester = new CommandTester($command);
+
+        self::assertSame(0, $tester->execute(['--auth-file' => $path, '--format' => 'bars'], ['decorated' => true]));
+        $display = $tester->getDisplay();
+        self::assertStringContainsString("\033[38;5;214m20% left\033[39m", $display);
+        self::assertMatchesRegularExpression('/\033\\[38;5;214m█+/', $display);
+    }
+
+    public function testUsageCommandHighlightsCriticalThresholdsInBarsOutput(): void
+    {
+        $path = $this->createAuthJson('access-token', 'refresh-token', 'account-123');
+        $command = new UsageCommand(
+            new AuthFileReader(),
+            new UsageClient(new MockHttpClient([
+                new MockResponse(json_encode([
+                    'primary' => [
+                        'usedPercent' => 92,
+                        'windowDurationMins' => 300,
+                        'resetsAt' => '2026-04-26T12:00:00Z',
+                    ],
+                ], JSON_THROW_ON_ERROR)),
+            ]))
+        );
+
+        $tester = new CommandTester($command);
+
+        self::assertSame(0, $tester->execute(['--auth-file' => $path, '--format' => 'bars'], ['decorated' => true]));
+        $display = $tester->getDisplay();
+        self::assertStringContainsString("\033[31m8% left\033[39m", $display);
+        self::assertMatchesRegularExpression('/\033\\[31m█+/', $display);
+    }
+
     public function testUsageCommandHighlightsWarningThresholdsInTextOutput(): void
     {
         $path = $this->createAuthJson('access-token', 'refresh-token', 'account-123');
@@ -227,10 +336,10 @@ final class CommandTest extends TestCase
 
         $tester = new CommandTester($command);
 
-        self::assertSame(0, $tester->execute(['--auth-file' => $path], ['decorated' => true]));
+        self::assertSame(0, $tester->execute(['--auth-file' => $path, '--format' => 'text'], ['decorated' => true]));
         $display = $tester->getDisplay();
-        self::assertStringContainsString("\033[33m25.00%\033[39m", $display);
-        self::assertStringContainsString("\033[33m75.00%\033[39m", $display);
+        self::assertStringContainsString("\033[38;5;214m25.00%\033[39m", $display);
+        self::assertStringContainsString("\033[38;5;214m75.00%\033[39m", $display);
     }
 
     public function testUsageCommandHighlightsCriticalThresholdsInTextOutput(): void
@@ -251,7 +360,7 @@ final class CommandTest extends TestCase
 
         $tester = new CommandTester($command);
 
-        self::assertSame(0, $tester->execute(['--auth-file' => $path], ['decorated' => true]));
+        self::assertSame(0, $tester->execute(['--auth-file' => $path, '--format' => 'text'], ['decorated' => true]));
         $display = $tester->getDisplay();
         self::assertStringContainsString("\033[31m5.00%\033[39m", $display);
         self::assertStringContainsString("\033[31m95.00%\033[39m", $display);
