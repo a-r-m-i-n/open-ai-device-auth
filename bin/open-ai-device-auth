@@ -8,7 +8,7 @@ use Armin\OpenAiDeviceAuth\Command\RefreshCommand;
 use Armin\OpenAiDeviceAuth\Command\UsageCommand;
 use Symfony\Component\Console\Application;
 
-require dirname(__DIR__) . '/vendor/autoload.php';
+require __DIR__ . '/bootstrap.php';
 
 $application = new Application('open-ai-device-auth');
 $application->addCommand(new LoginCommand());
