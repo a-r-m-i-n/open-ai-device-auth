@@ -21,6 +21,7 @@ use DateTimeImmutable;
 use DateTimeZone;
 use PHPUnit\Framework\TestCase;
 use Symfony\Component\Console\Application;
+use Symfony\Component\Console\Output\OutputInterface;
 use Symfony\Component\Console\Tester\CommandTester;
 use Symfony\Component\HttpClient\MockHttpClient;
 use Symfony\Component\HttpClient\Response\MockResponse;
@@ -159,6 +160,7 @@ final class CommandTest extends TestCase
             new AuthFileReader(),
             new UsageClient(new MockHttpClient([
                 new MockResponse(json_encode([
+                    'email' => 'example@domain.com',
                     'primary' => [
                         'usedPercent' => 25,
                         'windowDurationMins' => 180,
@@ -173,8 +175,9 @@ final class CommandTest extends TestCase
 
         self::assertSame(0, $tester->execute(['--auth-file' => $path, '--format' => 'text']));
         $display = $tester->getDisplay();
-        self::assertStringContainsString('ChatGPT Usage', $display);
+        self::assertStringContainsString('ChatGPT Usage (example@domain.com)', $display);
         self::assertStringContainsString($path, $display);
+        self::assertStringContainsString('(last refresh 37m ago)', $display);
         self::assertStringContainsString('Primary Left', $display);
         self::assertStringContainsString('75.00%', $display);
         self::assertStringContainsString('25.00%', $display);
@@ -192,6 +195,10 @@ final class CommandTest extends TestCase
             new AuthFileReader(),
             new UsageClient(new MockHttpClient([
                 new MockResponse(json_encode([
+                    'email' => 'example@domain.com',
+                    'account_id' => 'account-server',
+                    'user_id' => 'user-server',
+                    'plan_type' => 'plus',
                     'primary' => [
                         'usedPercent' => 25,
                         'windowDurationMins' => 180,
@@ -225,6 +232,10 @@ final class CommandTest extends TestCase
             new AuthFileReader(),
             new UsageClient(new MockHttpClient([
                 new MockResponse(json_encode([
+                    'email' => 'example@domain.com',
+                    'account_id' => 'account-server',
+                    'user_id' => 'user-server',
+                    'plan_type' => 'plus',
                     'primary' => [
                         'usedPercent' => 25,
                         'windowDurationMins' => 180,
@@ -244,7 +255,7 @@ final class CommandTest extends TestCase
 
         self::assertSame(0, $tester->execute(['--auth-file' => $path]));
         $display = $tester->getDisplay();
-        self::assertSame(2, substr_count($display, '0m'));
+        self::assertSame(2, substr_count($display, '(reset in 0min)'));
     }
 
     public function testUsageCommandRendersJsonOutput(): void
@@ -254,6 +265,10 @@ final class CommandTest extends TestCase
             new AuthFileReader(),
             new UsageClient(new MockHttpClient([
                 new MockResponse(json_encode([
+                    'email' => 'example@domain.com',
+                    'account_id' => 'account-server',
+                    'user_id' => 'user-server',
+                    'plan_type' => 'plus',
                     'primary' => [
                         'usedPercent' => 25,
                         'windowDurationMins' => 180,
@@ -268,6 +283,10 @@ final class CommandTest extends TestCase
         self::assertSame(0, $tester->execute(['--auth-file' => $path, '--format' => 'json']));
         self::assertJson($tester->getDisplay());
         self::assertStringContainsString('"primary"', $tester->getDisplay());
+        self::assertStringContainsString('"email": "example@domain.com"', $tester->getDisplay());
+        self::assertStringContainsString('"accountId": "account-server"', $tester->getDisplay());
+        self::assertStringContainsString('"userId": "user-server"', $tester->getDisplay());
+        self::assertStringContainsString('"planType": "plus"', $tester->getDisplay());
         self::assertStringNotContainsString('Resets In', $tester->getDisplay());
     }
 
@@ -298,12 +317,47 @@ final class CommandTest extends TestCase
         self::assertSame(0, $tester->execute(['--auth-file' => $path, '--format' => 'bars']));
         $display = $tester->getDisplay();
         self::assertStringContainsString($path, $display);
+        self::assertStringContainsString('(last refresh 0m ago)', $display);
         self::assertStringContainsString('5h', $display);
         self::assertStringContainsString('31% left (reset in 2h 15min)', $display);
         self::assertStringContainsString('7d', $display);
         self::assertStringContainsString('90% left (reset in 5d 11h)', $display);
         self::assertStringContainsString('█', $display);
         self::assertStringContainsString('░', $display);
+    }
+
+    public function testUsageCommandRendersVerboseMetadataWhenAvailable(): void
+    {
+        $path = $this->createAuthJson('access-token', 'refresh-token', 'account-123');
+        $command = new UsageCommand(
+            new AuthFileReader(),
+            new UsageClient(new MockHttpClient([
+                new MockResponse(json_encode([
+                    'email' => 'example@domain.com',
+                    'account_id' => 'account-server',
+                    'user_id' => 'user-server',
+                    'plan_type' => 'plus',
+                    'primary' => [
+                        'usedPercent' => 25,
+                        'windowDurationMins' => 300,
+                        'resetsAt' => '2026-04-26T12:15:00Z',
+                    ],
+                ], JSON_THROW_ON_ERROR)),
+            ])),
+            $this->fixedNow('2026-04-26T10:00:00Z')
+        );
+
+        $tester = new CommandTester($command);
+
+        self::assertSame(0, $tester->execute(['--auth-file' => $path, '--format' => 'bars'], [
+            'decorated' => true,
+            'verbosity' => OutputInterface::VERBOSITY_VERBOSE,
+        ]));
+        $display = $tester->getDisplay();
+        self::assertStringContainsString('ChatGPT Usage (example@domain.com)', $display);
+        self::assertMatchesRegularExpression('/\033\\[(?:38;5;241|90)maccount_id: account-server\033\\[39m/', $display);
+        self::assertMatchesRegularExpression('/\033\\[(?:38;5;241|90)muser_id: user-server\033\\[39m/', $display);
+        self::assertMatchesRegularExpression('/\033\\[(?:38;5;241|90)mplan_type: plus\033\\[39m/', $display);
     }
 
     public function testUsageCommandSupportsShortOptionAliases(): void
@@ -327,8 +381,34 @@ final class CommandTest extends TestCase
 
         self::assertSame(0, $tester->execute(['-a' => $path, '-f' => 'bars']));
         self::assertStringContainsString($path, $tester->getDisplay());
+        self::assertStringContainsString('(last refresh 0m ago)', $tester->getDisplay());
         self::assertStringContainsString('5h', $tester->getDisplay());
         self::assertStringContainsString('75% left (reset in 2h 15min)', $tester->getDisplay());
+    }
+
+    public function testUsageCommandSkipsLastRefreshSuffixWhenTimestampIsInvalid(): void
+    {
+        $path = $this->createAuthJson('access-token', 'refresh-token', 'account-123', 'not-a-timestamp');
+        $command = new UsageCommand(
+            new AuthFileReader(),
+            new UsageClient(new MockHttpClient([
+                new MockResponse(json_encode([
+                    'primary' => [
+                        'usedPercent' => 25,
+                        'windowDurationMins' => 180,
+                        'resetsAt' => '2026-04-26T12:00:00Z',
+                    ],
+                ], JSON_THROW_ON_ERROR)),
+            ])),
+            $this->fixedNow('2026-04-26T10:37:45Z')
+        );
+
+        $tester = new CommandTester($command);
+
+        self::assertSame(0, $tester->execute(['--auth-file' => $path, '--format' => 'text']));
+        $display = $tester->getDisplay();
+        self::assertStringContainsString($path, $display);
+        self::assertStringNotContainsString('last refresh', $display);
     }
 
     public function testUsageCommandHighlightsWarningThresholdsInBarsOutput(): void
@@ -353,6 +433,7 @@ final class CommandTest extends TestCase
         $display = $tester->getDisplay();
         self::assertMatchesRegularExpression('/\033\\[(?:38;5;214|33)m20% left\033\\[39m/', $display);
         self::assertMatchesRegularExpression('/\033\\[(?:38;5;214|33)m█+/', $display);
+        self::assertMatchesRegularExpression('/\033\\[(?:38;5;241|90)m\\(reset in [^)]+\\)\033\\[39m/', $display);
     }
 
     public function testUsageCommandHighlightsCriticalThresholdsInBarsOutput(): void
@@ -459,7 +540,7 @@ final class CommandTest extends TestCase
         return sprintf('%s.%s.', $header, $payload);
     }
 
-    private function createAuthJson(string $accessToken, string $refreshToken, string $accountId): string
+    private function createAuthJson(string $accessToken, string $refreshToken, string $accountId, string $lastRefresh = '2026-04-26T10:00:00.000000Z'): string
     {
         $path = sys_get_temp_dir() . '/open-ai-device-auth-command-' . uniqid('', true) . '.json';
         file_put_contents($path, json_encode([
@@ -471,7 +552,7 @@ final class CommandTest extends TestCase
                 'refresh_token' => $refreshToken,
                 'account_id' => $accountId,
             ],
-            'last_refresh' => '2026-04-26T10:00:00.000000Z',
+            'last_refresh' => $lastRefresh,
         ], JSON_THROW_ON_ERROR));
 
         return $path;

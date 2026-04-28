@@ -56,7 +56,15 @@ final class UsageClient
             throw new OpenAiDeviceAuthException('Usage response contains an invalid rateLimitReachedType.');
         }
 
-        return new UsageResponse($primary, $secondary, $rateLimitReachedType);
+        return new UsageResponse(
+            $primary,
+            $secondary,
+            $rateLimitReachedType,
+            $this->normalizeOptionalString($data['email'] ?? $rateLimits['email'] ?? null),
+            $this->normalizeOptionalString($data['account_id'] ?? $data['accountId'] ?? $rateLimits['account_id'] ?? $rateLimits['accountId'] ?? null),
+            $this->normalizeOptionalString($data['user_id'] ?? $data['userId'] ?? $rateLimits['user_id'] ?? $rateLimits['userId'] ?? null),
+            $this->normalizeOptionalString($data['plan_type'] ?? $data['planType'] ?? $rateLimits['plan_type'] ?? $rateLimits['planType'] ?? null)
+        );
     }
 
     /**
@@ -110,6 +118,15 @@ final class UsageClient
         }
 
         return $resetsAt;
+    }
+
+    private function normalizeOptionalString(mixed $value): ?string
+    {
+        if (!is_string($value) || $value === '') {
+            return null;
+        }
+
+        return $value;
     }
 
     private function formatHttpError(string $prefix, ResponseInterface $response): string

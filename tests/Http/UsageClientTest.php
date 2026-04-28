@@ -22,6 +22,10 @@ final class UsageClientTest extends TestCase
             $capturedOptions = [$method, $url, $options];
 
             return new MockResponse(json_encode([
+                'email' => 'example@domain.com',
+                'account_id' => 'account-123',
+                'user_id' => 'user-456',
+                'plan_type' => 'plus',
                 'primary' => [
                     'usedPercent' => 12.5,
                     'windowDurationMins' => 180,
@@ -47,6 +51,10 @@ final class UsageClientTest extends TestCase
         self::assertSame(12.5, $response->primary->usedPercent);
         self::assertSame(10080, $response->secondary?->windowDurationMins);
         self::assertSame('soft', $response->rateLimitReachedType);
+        self::assertSame('example@domain.com', $response->email);
+        self::assertSame('account-123', $response->accountId);
+        self::assertSame('user-456', $response->userId);
+        self::assertSame('plus', $response->planType);
     }
 
     public function testItSupportsNestedRateLimitsAndSnakeCaseFields(): void
@@ -54,6 +62,10 @@ final class UsageClientTest extends TestCase
         $client = new UsageClient(new MockHttpClient([
             new MockResponse(json_encode([
                 'rate_limit' => [
+                    'email' => 'snake@example.com',
+                    'account_id' => 'account-snake',
+                    'user_id' => 'user-snake',
+                    'plan_type' => 'pro',
                     'primary_window' => [
                         'used_percent' => 33,
                         'limit_window_seconds' => 18000,
@@ -76,6 +88,10 @@ final class UsageClientTest extends TestCase
         self::assertSame('2026-04-26T14:40:00+00:00', $response->primary->resetsAt);
         self::assertSame(70.0, $response->secondary?->usedPercent);
         self::assertSame('hard', $response->rateLimitReachedType);
+        self::assertSame('snake@example.com', $response->email);
+        self::assertSame('account-snake', $response->accountId);
+        self::assertSame('user-snake', $response->userId);
+        self::assertSame('pro', $response->planType);
     }
 
     public function testItFailsOnUnauthorizedResponse(): void

@@ -7,6 +7,7 @@ namespace Armin\OpenAiDeviceAuth\Command;
 use Armin\OpenAiDeviceAuth\Auth\AuthFileReader;
 use Armin\OpenAiDeviceAuth\Http\OpenAiHttpClientFactory;
 use Armin\OpenAiDeviceAuth\Http\UsageClient;
+use Armin\OpenAiDeviceAuth\Model\AuthFile;
 use Armin\OpenAiDeviceAuth\Model\OpenAiDeviceAuthException;
 use Armin\OpenAiDeviceAuth\Model\UsageResponse;
 use Armin\OpenAiDeviceAuth\Model\UsageWindow;
@@ -70,12 +71,12 @@ final class UsageCommand extends Command
             }
 
             if ($format === 'bars') {
-                $this->renderBarsUsage($io, $usage, $authFilePath);
+                $this->renderBarsUsage($io, $usage, $authFilePath, $authFile);
 
                 return Command::SUCCESS;
             }
 
-            $this->renderTextUsage($io, $usage, $authFilePath);
+            $this->renderTextUsage($io, $usage, $authFilePath, $authFile);
 
             return Command::SUCCESS;
         } catch (OpenAiDeviceAuthException $exception) {
@@ -85,11 +86,12 @@ final class UsageCommand extends Command
         }
     }
 
-    private function renderTextUsage(SymfonyStyle $io, UsageResponse $usage, string $authFilePath): void
+    private function renderTextUsage(SymfonyStyle $io, UsageResponse $usage, string $authFilePath, AuthFile $authFile): void
     {
         $primaryLeft = max(0, 100 - $usage->primary->usedPercent);
-        $io->title('ChatGPT Usage');
-        $io->writeln($authFilePath);
+        $io->title($this->formatUsageTitle($usage));
+        $io->writeln($this->formatAuthFileLine($authFilePath, $authFile));
+        $this->renderVerboseMetadata($io, $usage);
         $io->newLine();
         $io->definitionList(
             ['Primary Left' => $this->formatLeftPercent($primaryLeft)],
@@ -115,10 +117,11 @@ final class UsageCommand extends Command
         }
     }
 
-    private function renderBarsUsage(SymfonyStyle $io, UsageResponse $usage, string $authFilePath): void
+    private function renderBarsUsage(SymfonyStyle $io, UsageResponse $usage, string $authFilePath, AuthFile $authFile): void
     {
-        $io->title('ChatGPT Usage');
-        $io->writeln($authFilePath);
+        $io->title($this->formatUsageTitle($usage));
+        $io->writeln($this->formatAuthFileLine($authFilePath, $authFile));
+        $this->renderVerboseMetadata($io, $usage);
         $io->newLine();
         $io->writeln($this->formatUsageBarLine($usage->primary));
 
@@ -162,9 +165,7 @@ final class UsageCommand extends Command
     private function formatResetsIn(UsageWindow $window): string
     {
         $resetAt = new DateTimeImmutable($window->resetsAt);
-        $now = $this->nowProvider !== null
-            ? ($this->nowProvider)()
-            : new DateTimeImmutable('now', new DateTimeZone('UTC'));
+        $now = $this->now();
 
         $secondsLeft = max(0, $resetAt->getTimestamp() - $now->getTimestamp());
         $minutesLeft = intdiv($secondsLeft, 60);
@@ -191,13 +192,14 @@ final class UsageCommand extends Command
         $label = $this->formatWindowLabel($window);
         $bar = $this->buildProgressBar($leftPercent, 24, $style);
         $percent = $this->applyStyle(sprintf('%d%% left', $roundedLeftPercent), $style);
+        $reset = $this->applyStyle(sprintf('(reset in %s)', $this->formatResetCountdownForBars($window)), '#666666');
 
         return sprintf(
-            '%s %s %s (reset in %s)',
+            '%s %s %s %s',
             str_pad($label, 2, ' ', STR_PAD_RIGHT),
             $bar,
             $percent,
-            $this->formatResetCountdownForBars($window)
+            $reset
         );
     }
 
@@ -241,9 +243,7 @@ final class UsageCommand extends Command
     private function formatResetCountdownForBars(UsageWindow $window): string
     {
         $resetAt = new DateTimeImmutable($window->resetsAt);
-        $now = $this->nowProvider !== null
-            ? ($this->nowProvider)()
-            : new DateTimeImmutable('now', new DateTimeZone('UTC'));
+        $now = $this->now();
 
         $secondsLeft = max(0, $resetAt->getTimestamp() - $now->getTimestamp());
         $minutesLeft = intdiv($secondsLeft, 60);
@@ -286,5 +286,88 @@ final class UsageCommand extends Command
         }
 
         return sprintf('<fg=%s>%s</>', $style, $text);
+    }
+
+    private function formatAuthFileLine(string $authFilePath, AuthFile $authFile): string
+    {
+        try {
+            $lastRefresh = new DateTimeImmutable($authFile->lastRefresh);
+        } catch (\Exception) {
+            return $authFilePath;
+        }
+
+        return sprintf(
+            '%s<fg=#666666> (last refresh %s ago)</>',
+            $authFilePath,
+            $this->formatElapsedSince($lastRefresh, $this->now())
+        );
+    }
+
+    private function formatElapsedSince(DateTimeImmutable $from, DateTimeImmutable $to): string
+    {
+        $minutesElapsed = max(0, intdiv($to->getTimestamp() - $from->getTimestamp(), 60));
+        if ($minutesElapsed === 0) {
+            return '0m';
+        }
+
+        $days = intdiv($minutesElapsed, 1440);
+        $hours = intdiv($minutesElapsed % 1440, 60);
+        $minutes = $minutesElapsed % 60;
+
+        if ($days > 0) {
+            return sprintf('%dd %dh', $days, $hours);
+        }
+
+        if ($hours > 0) {
+            return sprintf('%dh %dm', $hours, $minutes);
+        }
+
+        return sprintf('%dm', $minutes);
+    }
+
+    private function now(): DateTimeImmutable
+    {
+        return $this->nowProvider !== null
+            ? ($this->nowProvider)()
+            : new DateTimeImmutable('now', new DateTimeZone('UTC'));
+    }
+
+    private function formatUsageTitle(UsageResponse $usage): string
+    {
+        if ($usage->email === null) {
+            return 'ChatGPT Usage';
+        }
+
+        return sprintf('ChatGPT Usage (%s)', $usage->email);
+    }
+
+    private function renderVerboseMetadata(SymfonyStyle $io, UsageResponse $usage): void
+    {
+        if (!$io->isVerbose()) {
+            return;
+        }
+
+        $lines = [];
+        if ($usage->accountId !== null) {
+            $lines[] = sprintf('<fg=#666666>account_id: %s</>', $usage->accountId);
+        }
+
+        if ($usage->userId !== null) {
+            $lines[] = sprintf('<fg=#666666>user_id: %s</>', $usage->userId);
+        }
+
+        if ($usage->planType !== null) {
+            $lines[] = sprintf('<fg=#666666>plan_type: %s</>', $usage->planType);
+        }
+
+        if ($lines === []) {
+            return;
+        }
+
+        $io->newLine();
+
+        foreach ($lines as $line) {
+            $io->writeln($line);
+        }
     }
 }
