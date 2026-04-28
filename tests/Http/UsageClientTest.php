@@ -7,6 +7,9 @@ namespace Armin\OpenAiDeviceAuth\Tests\Http;
 use Armin\OpenAiDeviceAuth\Http\UsageClient;
 use Armin\OpenAiDeviceAuth\Model\OpenAiDeviceAuthException;
 use PHPUnit\Framework\TestCase;
+use Symfony\Component\Console\Input\ArrayInput;
+use Symfony\Component\Console\Output\BufferedOutput;
+use Symfony\Component\Console\Style\SymfonyStyle;
 use Symfony\Component\HttpClient\MockHttpClient;
 use Symfony\Component\HttpClient\Response\MockResponse;
 
@@ -33,7 +36,7 @@ final class UsageClientTest extends TestCase
             ], JSON_THROW_ON_ERROR));
         });
 
-        $response = (new UsageClient($client))->fetch('access-token');
+        $response = (new UsageClient($client))->fetch('access-token', $this->createIo());
 
         self::assertSame('GET', $capturedOptions[0]);
         self::assertSame('https://chatgpt.com/backend-api/wham/usage', $capturedOptions[1]);
@@ -66,7 +69,7 @@ final class UsageClientTest extends TestCase
             ], JSON_THROW_ON_ERROR)),
         ]));
 
-        $response = $client->fetch('access-token');
+        $response = $client->fetch('access-token', $this->createIo());
 
         self::assertSame(33.0, $response->primary->usedPercent);
         self::assertSame(300, $response->primary->windowDurationMins);
@@ -82,7 +85,7 @@ final class UsageClientTest extends TestCase
         ]));
 
         $this->expectException(OpenAiDeviceAuthException::class);
-        $client->fetch('access-token');
+        $client->fetch('access-token', $this->createIo());
     }
 
     public function testItFailsOnUnexpectedPayload(): void
@@ -92,6 +95,11 @@ final class UsageClientTest extends TestCase
         ]));
 
         $this->expectException(OpenAiDeviceAuthException::class);
-        $client->fetch('access-token');
+        $client->fetch('access-token', $this->createIo());
+    }
+
+    private function createIo(): SymfonyStyle
+    {
+        return new SymfonyStyle(new ArrayInput([]), new BufferedOutput());
     }
 }

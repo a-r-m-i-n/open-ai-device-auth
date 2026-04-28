@@ -23,7 +23,7 @@ use Symfony\Component\Console\Style\SymfonyStyle;
 #[AsCommand(name: self::NAME, description: 'Fetch ChatGPT usage and rate limits using an existing auth.json.')]
 final class UsageCommand extends Command
 {
-    public const NAME = 'usage';
+    public const string NAME = 'usage';
 
     public function __construct(
         private readonly ?AuthFileReader $authFileReader = null,
@@ -36,7 +36,7 @@ final class UsageCommand extends Command
     protected function configure(): void
     {
         $this
-            ->addOption('auth-file', 'a', InputOption::VALUE_REQUIRED, 'Path to an existing auth.json')
+            ->addOption('auth-file', 'a', InputOption::VALUE_REQUIRED, 'Path to an existing auth.json', './auth.json')
             ->addOption('format', 'f', InputOption::VALUE_REQUIRED, 'Output format: text, json or bars (default)', 'bars');
     }
 
@@ -45,11 +45,7 @@ final class UsageCommand extends Command
         $io = new SymfonyStyle($input, $output);
 
         try {
-            $authFilePath = $input->getOption('auth-file');
-            if (!is_string($authFilePath) || $authFilePath === '') {
-                throw new OpenAiDeviceAuthException('The --auth-file option is required.');
-            }
-
+            $authFilePath = (string) $input->getOption('auth-file');
             $format = (string) $input->getOption('format');
             if (!in_array($format, ['text', 'json', 'bars'], true)) {
                 throw new OpenAiDeviceAuthException('The --format option must be either text, json or bars.');
@@ -60,7 +56,7 @@ final class UsageCommand extends Command
             $usageClient = $this->usageClient ?? new UsageClient($httpClient);
 
             $authFile = $authFileReader->read($authFilePath);
-            $usage = $usageClient->fetch($authFile->accessToken);
+            $usage = $usageClient->fetch($authFile->accessToken, $io);
 
             if ($format === 'json') {
                 $json = json_encode($usage->toArray(), JSON_PRETTY_PRINT | JSON_UNESCAPED_SLASHES);
@@ -131,9 +127,10 @@ final class UsageCommand extends Command
         }
 
         if ($usage->rateLimitReachedType !== null) {
-            $io->writeln('');
+            $io->newLine();
             $io->text(sprintf('Rate limit reached type: %s', $usage->rateLimitReachedType));
         }
+        $io->newLine();
     }
 
     private function formatLeftPercent(float $leftPercent): string

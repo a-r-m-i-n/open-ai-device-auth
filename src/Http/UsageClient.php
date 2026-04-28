@@ -7,6 +7,7 @@ namespace Armin\OpenAiDeviceAuth\Http;
 use Armin\OpenAiDeviceAuth\Model\OpenAiDeviceAuthException;
 use Armin\OpenAiDeviceAuth\Model\UsageResponse;
 use Armin\OpenAiDeviceAuth\Model\UsageWindow;
+use Symfony\Component\Console\Style\SymfonyStyle;
 use Symfony\Contracts\HttpClient\HttpClientInterface;
 use Symfony\Contracts\HttpClient\ResponseInterface;
 
@@ -19,7 +20,7 @@ final class UsageClient
     ) {
     }
 
-    public function fetch(string $accessToken): UsageResponse
+    public function fetch(string $accessToken, SymfonyStyle $io): UsageResponse
     {
         $response = $this->httpClient->request('GET', self::USAGE_URL, [
             'headers' => [
@@ -34,6 +35,9 @@ final class UsageClient
 
         /** @var array<string, mixed> $data */
         $data = $response->toArray(false);
+        if (!empty($data) && $io->isVerbose()) {
+            $io->writeln(json_encode($data, JSON_THROW_ON_ERROR | JSON_PRETTY_PRINT));
+        }
 
         $rateLimits = $this->extractRateLimitsPayload($data);
 

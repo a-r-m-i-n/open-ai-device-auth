@@ -35,12 +35,18 @@ vendor/bin/open-ai-device-auth login
 Write to a custom location:
 
 ```bash
-vendor/bin/open-ai-device-auth login --output=/path/to/auth.json
+vendor/bin/open-ai-device-auth login --auth-file=/path/to/auth.json
 ```
 
 ### Refresh
 
-Refresh tokens in an existing `auth.json`:
+Refresh tokens in `./auth.json`:
+
+```bash
+vendor/bin/open-ai-device-auth refresh
+```
+
+Refresh tokens in a custom `auth.json`:
 
 ```bash
 vendor/bin/open-ai-device-auth refresh --auth-file=/path/to/auth.json
@@ -48,7 +54,13 @@ vendor/bin/open-ai-device-auth refresh --auth-file=/path/to/auth.json
 
 ### Usage
 
-Fetch ChatGPT usage and rate limits from an existing `auth.json`:
+Fetch ChatGPT usage and rate limits from `./auth.json`:
+
+```bash
+vendor/bin/open-ai-device-auth usage
+```
+
+Fetch ChatGPT usage and rate limits from a custom `auth.json`:
 
 ```bash
 vendor/bin/open-ai-device-auth usage --auth-file=/path/to/auth.json
@@ -66,7 +78,9 @@ vendor/bin/open-ai-device-auth usage --auth-file=/path/to/auth.json --format=jso
 2. Open `https://auth.openai.com/codex/device` in any browser.
 3. Enter the displayed one-time code.
 4. Wait for authorization to complete.
-5. The CLI writes `./auth.json` unless `--output` is provided.
+5. The CLI writes `./auth.json` unless `--auth-file` is provided.
+
+All three commands support `--auth-file` and `-a`. The default path is `./auth.json`.
 
 ## Output Format
 

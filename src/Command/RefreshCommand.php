@@ -20,7 +20,7 @@ use Symfony\Component\Console\Style\SymfonyStyle;
 #[AsCommand(name: self::NAME, description: 'Refresh OpenAI ChatGPT tokens in an existing auth.json.')]
 final class RefreshCommand extends Command
 {
-    public const NAME = 'refresh';
+    public const string NAME = 'refresh';
 
     public function __construct(
         private readonly ?AuthFileReader $authFileReader = null,
@@ -33,7 +33,7 @@ final class RefreshCommand extends Command
 
     protected function configure(): void
     {
-        $this->addOption('auth-file', null, InputOption::VALUE_REQUIRED, 'Path to an existing auth.json');
+        $this->addOption('auth-file', 'a', InputOption::VALUE_REQUIRED, 'Path to an existing auth.json', './auth.json');
     }
 
     protected function execute(InputInterface $input, OutputInterface $output): int
@@ -41,11 +41,7 @@ final class RefreshCommand extends Command
         $io = new SymfonyStyle($input, $output);
 
         try {
-            $authFilePath = $input->getOption('auth-file');
-            if (!is_string($authFilePath) || $authFilePath === '') {
-                throw new OpenAiDeviceAuthException('The --auth-file option is required.');
-            }
-
+            $authFilePath = (string) $input->getOption('auth-file');
             $httpClient = OpenAiHttpClientFactory::create();
             $authFileReader = $this->authFileReader ?? new AuthFileReader();
             $refreshTokenClient = $this->refreshTokenClient ?? new RefreshTokenClient($httpClient);

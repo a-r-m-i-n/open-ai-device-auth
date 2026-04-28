@@ -24,7 +24,7 @@ use Symfony\Component\Console\Style\SymfonyStyle;
 #[AsCommand(name: self::NAME, description: 'Authenticate via OpenAI device code flow and write auth.json.')]
 final class LoginCommand extends Command
 {
-    public const NAME = 'login';
+    public const string NAME = 'login';
 
     public function __construct(
         private readonly ?DeviceCodeClient $deviceCodeClient = null,
@@ -38,7 +38,7 @@ final class LoginCommand extends Command
 
     protected function configure(): void
     {
-        $this->addOption('output', null, InputOption::VALUE_REQUIRED, 'Output path for auth.json', './auth.json');
+        $this->addOption('auth-file', 'a', InputOption::VALUE_REQUIRED, 'Output path and file name for auth.json', './auth.json');
     }
 
     protected function execute(InputInterface $input, OutputInterface $output): int
@@ -64,7 +64,7 @@ final class LoginCommand extends Command
 
             $tokens = $tokenExchanger->exchange($result);
             $accountId = $tokenPayloadDecoder->extractAccountId($tokens);
-            $targetPath = (string) $input->getOption('output');
+            $targetPath = (string) $input->getOption('auth-file');
 
             $authFileWriter->write($targetPath, $tokens, $accountId);
 

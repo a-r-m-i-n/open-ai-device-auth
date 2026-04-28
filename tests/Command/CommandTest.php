@@ -59,8 +59,44 @@ final class CommandTest extends TestCase
         $path = sys_get_temp_dir() . '/open-ai-device-auth-login-' . uniqid('', true) . '.json';
         $tester = new CommandTester($command);
 
-        self::assertSame(0, $tester->execute(['--output' => $path]));
+        self::assertSame(0, $tester->execute(['--auth-file' => $path]));
         self::assertStringContainsString('Authentication successful', $tester->getDisplay());
+        self::assertFileExists($path);
+    }
+
+    public function testLoginCommandSupportsShortAuthFileAlias(): void
+    {
+        $command = new LoginCommand(
+            new DeviceCodeClient(new MockHttpClient([
+                new MockResponse(json_encode([
+                    'device_auth_id' => 'device-1',
+                    'user_code' => 'ABCD',
+                    'interval' => '0',
+                ], JSON_THROW_ON_ERROR)),
+            ])),
+            new DeviceCodePoller(new MockHttpClient([
+                new MockResponse(json_encode([
+                    'authorization_code' => 'auth-code',
+                    'code_verifier' => 'verifier',
+                    'code_challenge' => 'challenge',
+                ], JSON_THROW_ON_ERROR)),
+            ])),
+            new TokenExchanger(new MockHttpClient([
+                new MockResponse(json_encode([
+                    'id_token' => $this->createJwt('account-123'),
+                    'access_token' => 'access-token',
+                    'refresh_token' => 'refresh-token',
+                    'expires_in' => 3600,
+                ], JSON_THROW_ON_ERROR)),
+            ])),
+            new TokenPayloadDecoder(),
+            new AuthFileWriter()
+        );
+
+        $path = sys_get_temp_dir() . '/open-ai-device-auth-login-' . uniqid('', true) . '.json';
+        $tester = new CommandTester($command);
+
+        self::assertSame(0, $tester->execute(['-a' => $path]));
         self::assertFileExists($path);
     }
 
@@ -91,6 +127,31 @@ final class CommandTest extends TestCase
         self::assertSame('new-account', $data['tokens']['account_id']);
     }
 
+    public function testRefreshCommandSupportsShortAuthFileAlias(): void
+    {
+        $path = $this->createAuthJson('old-access', 'old-refresh', 'old-account');
+        $command = new RefreshCommand(
+            new AuthFileReader(),
+            new RefreshTokenClient(new MockHttpClient([
+                new MockResponse(json_encode([
+                    'id_token' => $this->createJwt('new-account'),
+                    'access_token' => 'new-access',
+                    'refresh_token' => 'new-refresh',
+                ], JSON_THROW_ON_ERROR)),
+            ])),
+            new TokenPayloadDecoder(),
+            new AuthFileWriter()
+        );
+
+        $tester = new CommandTester($command);
+
+        self::assertSame(0, $tester->execute(['-a' => $path]));
+
+        /** @var array<string, mixed> $data */
+        $data = json_decode((string) file_get_contents($path), true, 512, JSON_THROW_ON_ERROR);
+        self::assertSame('new-access', $data['tokens']['access_token']);
+    }
+
     public function testUsageCommandRendersTextOutput(): void
     {
         $path = $this->createAuthJson('access-token', 'refresh-token', 'account-123');
@@ -113,7 +174,7 @@ final class CommandTest extends TestCase
         self::assertSame(0, $tester->execute(['--auth-file' => $path, '--format' => 'text']));
         $display = $tester->getDisplay();
         self::assertStringContainsString('ChatGPT Usage', $display);
-        self::assertStringContainsString(sprintf('Auth file: %s', $path), $display);
+        self::assertStringContainsString($path, $display);
         self::assertStringContainsString('Primary Left', $display);
         self::assertStringContainsString('75.00%', $display);
         self::assertStringContainsString('25.00%', $display);
@@ -236,7 +297,7 @@ final class CommandTest extends TestCase
 
         self::assertSame(0, $tester->execute(['--auth-file' => $path, '--format' => 'bars']));
         $display = $tester->getDisplay();
-        self::assertStringContainsString(sprintf('Auth file: %s', $path), $display);
+        self::assertStringContainsString($path, $display);
         self::assertStringContainsString('5h', $display);
         self::assertStringContainsString('31% left (reset in 2h 15min)', $display);
         self::assertStringContainsString('7d', $display);
@@ -265,7 +326,7 @@ final class CommandTest extends TestCase
         $tester = new CommandTester($command);
 
         self::assertSame(0, $tester->execute(['-a' => $path, '-f' => 'bars']));
-        self::assertStringContainsString(sprintf('Auth file: %s', $path), $tester->getDisplay());
+        self::assertStringContainsString($path, $tester->getDisplay());
         self::assertStringContainsString('5h', $tester->getDisplay());
         self::assertStringContainsString('75% left (reset in 2h 15min)', $tester->getDisplay());
     }
@@ -290,8 +351,8 @@ final class CommandTest extends TestCase
 
         self::assertSame(0, $tester->execute(['--auth-file' => $path, '--format' => 'bars'], ['decorated' => true]));
         $display = $tester->getDisplay();
-        self::assertStringContainsString("\033[38;5;214m20% left\033[39m", $display);
-        self::assertMatchesRegularExpression('/\033\\[38;5;214m█+/', $display);
+        self::assertMatchesRegularExpression('/\033\\[(?:38;5;214|33)m20% left\033\\[39m/', $display);
+        self::assertMatchesRegularExpression('/\033\\[(?:38;5;214|33)m█+/', $display);
     }
 
     public function testUsageCommandHighlightsCriticalThresholdsInBarsOutput(): void
@@ -338,8 +399,8 @@ final class CommandTest extends TestCase
 
         self::assertSame(0, $tester->execute(['--auth-file' => $path, '--format' => 'text'], ['decorated' => true]));
         $display = $tester->getDisplay();
-        self::assertStringContainsString("\033[38;5;214m25.00%\033[39m", $display);
-        self::assertStringContainsString("\033[38;5;214m75.00%\033[39m", $display);
+        self::assertMatchesRegularExpression('/\033\\[(?:38;5;214|33)m25\\.00%\033\\[39m/', $display);
+        self::assertMatchesRegularExpression('/\033\\[(?:38;5;214|33)m75\\.00%\033\\[39m/', $display);
     }
 
     public function testUsageCommandHighlightsCriticalThresholdsInTextOutput(): void
@@ -366,24 +427,24 @@ final class CommandTest extends TestCase
         self::assertStringContainsString("\033[31m95.00%\033[39m", $display);
     }
 
-    public function testRefreshCommandRequiresAuthFile(): void
+    public function testRefreshCommandUsesDefaultAuthFilePath(): void
     {
         $application = new Application();
         $application->add(new RefreshCommand());
         $tester = new CommandTester($application->find('refresh'));
 
         self::assertSame(1, $tester->execute([]));
-        self::assertStringContainsString('--auth-file option is required', $tester->getDisplay());
+        self::assertStringContainsString('Unable to read auth file at ./auth.json.', $tester->getDisplay());
     }
 
-    public function testUsageCommandRequiresAuthFile(): void
+    public function testUsageCommandUsesDefaultAuthFilePath(): void
     {
         $application = new Application();
         $application->add(new UsageCommand());
         $tester = new CommandTester($application->find('usage'));
 
         self::assertSame(1, $tester->execute([]));
-        self::assertStringContainsString('--auth-file option is required', $tester->getDisplay());
+        self::assertStringContainsString('Unable to read auth file at ./auth.json.', $tester->getDisplay());
     }
 
     private function createJwt(string $accountId): string
