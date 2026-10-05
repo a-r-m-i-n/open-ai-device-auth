@@ -7,7 +7,7 @@
 - Standard suite: `composer test`. For reliable ANSI assertions in headless sessions, use `TERM=xterm-256color php vendor/bin/phpunit --do-not-cache-result` (also avoids errors when `.phpunit.cache` is unwritable).
 - Focused file: `TERM=xterm-256color php vendor/bin/phpunit --do-not-cache-result tests/Http/UsageClientTest.php`; add `--filter testItReturnsAuthorizationDataOnSuccess` with `tests/Http/DeviceCodePollerTest.php` to run one method.
 - HTTP tests use Symfony `MockHttpClient`/`MockResponse`; command tests inject these clients and use `CommandTester`. No live account or service is needed. Poller tests still sleep at least one second per call, even with interval `0`.
-- Run tests from the repository root with `./auth.json` absent: two default-path tests expect a missing file. Use `--auth-file` pointing outside the checkout for manual login/refresh; root `/auth*.json` files are ignored local token stores, not test fixtures.
+- Run tests from the repository root. The two default-path tests execute in empty temporary directories and restore the working directory afterward, so a local `./auth.json` does not affect them. Use `--auth-file` pointing outside the checkout for manual login/refresh; root `/auth*.json` files are ignored local token stores, not test fixtures.
 
 ## Wiring and behavior
 

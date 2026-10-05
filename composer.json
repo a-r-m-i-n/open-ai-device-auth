@@ -12,6 +12,9 @@
   "require-dev": {
     "phpunit/phpunit": "^11.5"
   },
+  "conflict": {
+    "symfony/polyfill-php83": "<1.30"
+  },
   "autoload": {
     "psr-4": {
       "Armin\\OpenAiDeviceAuth\\": "src/"

@@ -511,21 +511,39 @@ final class CommandTest extends TestCase
     public function testRefreshCommandUsesDefaultAuthFilePath(): void
     {
         $application = new Application();
-        $application->add(new RefreshCommand());
+        $application->addCommand(new RefreshCommand());
         $tester = new CommandTester($application->find('refresh'));
 
-        self::assertSame(1, $tester->execute([]));
+        self::assertSame(1, $this->executeWithoutDefaultAuthFile($tester));
         self::assertStringContainsString('Unable to read auth file at ./auth.json.', $tester->getDisplay());
     }
 
     public function testUsageCommandUsesDefaultAuthFilePath(): void
     {
         $application = new Application();
-        $application->add(new UsageCommand());
+        $application->addCommand(new UsageCommand());
         $tester = new CommandTester($application->find('usage'));
 
-        self::assertSame(1, $tester->execute([]));
+        self::assertSame(1, $this->executeWithoutDefaultAuthFile($tester));
         self::assertStringContainsString('Unable to read auth file at ./auth.json.', $tester->getDisplay());
+    }
+
+    private function executeWithoutDefaultAuthFile(CommandTester $tester): int
+    {
+        $workingDirectory = getcwd();
+        self::assertIsString($workingDirectory);
+
+        $directory = sys_get_temp_dir() . '/open-ai-device-auth-default-path-' . uniqid('', true);
+        self::assertTrue(mkdir($directory, 0700));
+
+        try {
+            self::assertTrue(chdir($directory));
+
+            return $tester->execute([]);
+        } finally {
+            chdir($workingDirectory);
+            rmdir($directory);
+        }
     }
 
     private function createJwt(string $accountId): string
