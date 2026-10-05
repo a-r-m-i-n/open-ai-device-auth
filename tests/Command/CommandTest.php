@@ -19,6 +19,7 @@ use Armin\OpenAiDeviceAuth\Model\AuthFile;
 use Closure;
 use DateTimeImmutable;
 use DateTimeZone;
+use PHPUnit\Framework\Attributes\DataProvider;
 use PHPUnit\Framework\TestCase;
 use Symfony\Component\Console\Application;
 use Symfony\Component\Console\Output\OutputInterface;
@@ -526,6 +527,58 @@ final class CommandTest extends TestCase
 
         self::assertSame(1, $this->executeWithoutDefaultAuthFile($tester));
         self::assertStringContainsString('Unable to read auth file at ./auth.json.', $tester->getDisplay());
+    }
+
+    #[DataProvider('usageResetCounts')]
+    public function testUsageShowsResetCountsInEveryFormatWithoutAnExtraRequest(string $format, ?int $count): void
+    {
+        $path = $this->createAuthJson('access-token', 'refresh-token', 'account-123');
+        $requests = 0;
+        $client = new UsageClient(new MockHttpClient(static function (string $method, string $url, array $options) use ($count, &$requests): MockResponse {
+            ++$requests;
+            self::assertSame('GET', $method);
+            self::assertSame('https://chatgpt.com/backend-api/wham/usage', $url);
+            self::assertStringContainsString('chatgpt-account-id: account-123', strtolower(implode("\n", $options['headers'])));
+            $data = ['primary' => ['usedPercent' => 25, 'windowDurationMins' => 300, 'resetsAt' => '2026-04-26T12:00:00Z']];
+            if ($count !== null) {
+                $data['rate_limit_reset_credits'] = ['available_count' => $count];
+            }
+
+            return new MockResponse(json_encode($data, JSON_THROW_ON_ERROR));
+        }));
+        $tester = new CommandTester(new UsageCommand(new AuthFileReader(), $client, $this->fixedNow('2026-04-26T10:00:00Z')));
+
+        try {
+            $options = ['--auth-file' => $path];
+            if ($format !== 'default') {
+                $options['--format'] = $format;
+            }
+            self::assertSame(0, $tester->execute($options));
+            self::assertSame(1, $requests);
+            if ($format === 'json') {
+                $data = json_decode($tester->getDisplay(), true, 512, JSON_THROW_ON_ERROR);
+                if ($count === null) {
+                    self::assertArrayNotHasKey('rateLimitResetCredits', $data);
+                } else {
+                    self::assertSame(['availableCount' => $count], $data['rateLimitResetCredits']);
+                }
+            } elseif ($count === null) {
+                self::assertStringNotContainsString('Available resets:', $tester->getDisplay());
+            } else {
+                self::assertStringContainsString(sprintf('Available resets: %d', $count), $tester->getDisplay());
+            }
+        } finally {
+            unlink($path);
+        }
+    }
+
+    public static function usageResetCounts(): iterable
+    {
+        foreach (['default', 'bars', 'text', 'json'] as $format) {
+            foreach ([null, 0, 3] as $count) {
+                yield $format . '-' . ($count ?? 'missing') => [$format, $count];
+            }
+        }
     }
 
     private function executeWithoutDefaultAuthFile(CommandTester $tester): int

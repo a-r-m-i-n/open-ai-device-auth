@@ -5,6 +5,8 @@ declare(strict_types=1);
 
 use Armin\OpenAiDeviceAuth\Command\LoginCommand;
 use Armin\OpenAiDeviceAuth\Command\RefreshCommand;
+use Armin\OpenAiDeviceAuth\Command\ResetCommand;
+use Armin\OpenAiDeviceAuth\Command\ResetsCommand;
 use Armin\OpenAiDeviceAuth\Command\UsageCommand;
 use Symfony\Component\Console\Application;
 
@@ -14,5 +16,7 @@ $application = new Application('open-ai-device-auth');
 $application->addCommand(new LoginCommand());
 $application->addCommand(new RefreshCommand());
 $application->addCommand(new UsageCommand());
+$application->addCommand(new ResetsCommand());
+$application->addCommand(new ResetCommand());
 
 exit($application->run());

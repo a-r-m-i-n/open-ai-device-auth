@@ -6,6 +6,7 @@ namespace Armin\OpenAiDeviceAuth\Tests\Http;
 
 use Armin\OpenAiDeviceAuth\Http\UsageClient;
 use Armin\OpenAiDeviceAuth\Model\OpenAiDeviceAuthException;
+use PHPUnit\Framework\Attributes\DataProvider;
 use PHPUnit\Framework\TestCase;
 use Symfony\Component\Console\Input\ArrayInput;
 use Symfony\Component\Console\Output\BufferedOutput;
@@ -111,6 +112,47 @@ final class UsageClientTest extends TestCase
         ]));
 
         $this->expectException(OpenAiDeviceAuthException::class);
+        $client->fetch('access-token', $this->createIo());
+    }
+
+    #[DataProvider('resetCreditSummaries')]
+    public function testItNormalizesResetCreditCounts(array $metadata, ?int $expectedCount): void
+    {
+        $client = new UsageClient(new MockHttpClient(static function (string $method, string $url, array $options) use ($metadata): MockResponse {
+            self::assertStringContainsString('chatgpt-account-id: account-123', strtolower(implode("\n", $options['headers'])));
+
+            return new MockResponse(json_encode($metadata + ['rate_limit' => [
+                'primary_window' => ['used_percent' => 25, 'limit_window_seconds' => 18000, 'reset_at' => 1777214400],
+            ]], JSON_THROW_ON_ERROR));
+        }));
+
+        $response = $client->fetch('access-token', $this->createIo(), 'account-123');
+        self::assertSame($expectedCount, $response->rateLimitResetCredits?->availableCount);
+        if ($expectedCount === null) {
+            self::assertArrayNotHasKey('rateLimitResetCredits', $response->toArray());
+        } else {
+            self::assertSame(['availableCount' => $expectedCount], $response->toArray()['rateLimitResetCredits']);
+        }
+    }
+
+    public static function resetCreditSummaries(): iterable
+    {
+        yield 'missing summary' => [[], null];
+        yield 'null summary' => [['rate_limit_reset_credits' => null], null];
+        yield 'zero count' => [['rate_limit_reset_credits' => ['available_count' => 0]], 0];
+        yield 'positive count' => [['rate_limit_reset_credits' => ['available_count' => 3]], 3];
+        yield 'camel case' => [['rateLimitResetCredits' => ['availableCount' => 2]], 2];
+    }
+
+    public function testItRejectsInvalidResetCreditCounts(): void
+    {
+        $client = new UsageClient(new MockHttpClient(new MockResponse(json_encode([
+            'primary' => ['usedPercent' => 25, 'windowDurationMins' => 300, 'resetsAt' => '2026-04-26T12:00:00Z'],
+            'rate_limit_reset_credits' => ['available_count' => -1],
+        ], JSON_THROW_ON_ERROR))));
+
+        $this->expectException(OpenAiDeviceAuthException::class);
+        $this->expectExceptionMessage('invalid reset credit available_count');
         $client->fetch('access-token', $this->createIo());
     }
 

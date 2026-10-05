@@ -57,7 +57,7 @@ final class UsageCommand extends Command
             $usageClient = $this->usageClient ?? new UsageClient($httpClient);
 
             $authFile = $authFileReader->read($authFilePath);
-            $usage = $usageClient->fetch($authFile->accessToken, $io);
+            $usage = $usageClient->fetch($authFile->accessToken, $io, $authFile->accountId);
 
             if ($format === 'json') {
                 $json = json_encode($usage->toArray(), JSON_PRETTY_PRINT | JSON_UNESCAPED_SLASHES);
@@ -115,6 +115,7 @@ final class UsageCommand extends Command
         if ($usage->rateLimitReachedType !== null) {
             $io->text(sprintf('Rate limit reached type: %s', $usage->rateLimitReachedType));
         }
+        $this->renderResetCredits($io, $usage);
     }
 
     private function renderBarsUsage(SymfonyStyle $io, UsageResponse $usage, string $authFilePath, AuthFile $authFile): void
@@ -133,7 +134,15 @@ final class UsageCommand extends Command
             $io->newLine();
             $io->text(sprintf('Rate limit reached type: %s', $usage->rateLimitReachedType));
         }
+        $this->renderResetCredits($io, $usage);
         $io->newLine();
+    }
+
+    private function renderResetCredits(SymfonyStyle $io, UsageResponse $usage): void
+    {
+        if ($usage->rateLimitResetCredits !== null) {
+            $io->writeln($this->applyStyle(sprintf('Available resets: %d', $usage->rateLimitResetCredits->availableCount), '#666666'));
+        }
     }
 
     private function formatLeftPercent(float $leftPercent): string

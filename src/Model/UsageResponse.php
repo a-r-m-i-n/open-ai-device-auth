@@ -13,7 +13,8 @@ final readonly class UsageResponse
         public ?string $email = null,
         public ?string $accountId = null,
         public ?string $userId = null,
-        public ?string $planType = null
+        public ?string $planType = null,
+        public ?RateLimitResetCreditsSummary $rateLimitResetCredits = null
     ) {
     }
 
@@ -25,7 +26,8 @@ final readonly class UsageResponse
      *   email?: string,
      *   accountId?: string,
      *   userId?: string,
-     *   planType?: string
+     *   planType?: string,
+     *   rateLimitResetCredits?: array{availableCount: int}
      * }
      */
     public function toArray(): array
@@ -56,6 +58,10 @@ final readonly class UsageResponse
 
         if ($this->planType !== null) {
             $data['planType'] = $this->planType;
+        }
+
+        if ($this->rateLimitResetCredits !== null) {
+            $data['rateLimitResetCredits'] = $this->rateLimitResetCredits->toArray();
         }
 
         return $data;

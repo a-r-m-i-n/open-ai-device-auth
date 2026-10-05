@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace Armin\OpenAiDeviceAuth\Http;
 
 use Armin\OpenAiDeviceAuth\Model\OpenAiDeviceAuthException;
+use Armin\OpenAiDeviceAuth\Model\RateLimitResetCreditsSummary;
 use Armin\OpenAiDeviceAuth\Model\UsageResponse;
 use Armin\OpenAiDeviceAuth\Model\UsageWindow;
 use Symfony\Component\Console\Style\SymfonyStyle;
@@ -20,13 +21,18 @@ final class UsageClient
     ) {
     }
 
-    public function fetch(string $accessToken, SymfonyStyle $io): UsageResponse
+    public function fetch(string $accessToken, SymfonyStyle $io, ?string $accountId = null): UsageResponse
     {
+        $headers = [
+            'Authorization' => sprintf('Bearer %s', $accessToken),
+            'Accept' => 'application/json',
+        ];
+        if ($accountId !== null) {
+            $headers['ChatGPT-Account-Id'] = $accountId;
+        }
+
         $response = $this->httpClient->request('GET', self::USAGE_URL, [
-            'headers' => [
-                'Authorization' => sprintf('Bearer %s', $accessToken),
-                'Accept' => 'application/json',
-            ],
+            'headers' => $headers,
         ]);
 
         if ($response->getStatusCode() >= 400) {
@@ -63,8 +69,23 @@ final class UsageClient
             $this->normalizeOptionalString($data['email'] ?? $rateLimits['email'] ?? null),
             $this->normalizeOptionalString($data['account_id'] ?? $data['accountId'] ?? $rateLimits['account_id'] ?? $rateLimits['accountId'] ?? null),
             $this->normalizeOptionalString($data['user_id'] ?? $data['userId'] ?? $rateLimits['user_id'] ?? $rateLimits['userId'] ?? null),
-            $this->normalizeOptionalString($data['plan_type'] ?? $data['planType'] ?? $rateLimits['plan_type'] ?? $rateLimits['planType'] ?? null)
+            $this->normalizeOptionalString($data['plan_type'] ?? $data['planType'] ?? $rateLimits['plan_type'] ?? $rateLimits['planType'] ?? null),
+            $this->normalizeResetCredits($data['rate_limit_reset_credits'] ?? $data['rateLimitResetCredits'] ?? null)
         );
+    }
+
+    private function normalizeResetCredits(mixed $value): ?RateLimitResetCreditsSummary
+    {
+        if ($value === null) {
+            return null;
+        }
+
+        $count = is_array($value) ? ($value['available_count'] ?? $value['availableCount'] ?? null) : null;
+        if (!is_int($count) || $count < 0) {
+            throw new OpenAiDeviceAuthException('Usage response contains an invalid reset credit available_count.');
+        }
+
+        return new RateLimitResetCreditsSummary($count);
     }
 
     /**
